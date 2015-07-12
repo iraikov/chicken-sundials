@@ -1,0 +1,72 @@
+;; -*- Hen -*-
+
+(define (dynld-name fn)		
+  (make-pathname #f fn ##sys#load-dynamic-extension))	
+
+(define (sundials-try-compile header ldflags cppflags)
+  (and (try-compile 
+	(string-append "#include <stdlib.h>\n"
+		       "#include <stdio.h>\n"
+	 	       "#include <math.h>\n"
+		       header "\n" 
+		       "int main(int argc, char **argv) { void *x; x = NULL; CVodeFree(&x); IDAFree(&x); printf (\"%s\\n\",SUNDIALS_PACKAGE_VERSION); return 0; }\n")
+	ldflags: ldflags
+	cflags: (string-append cppflags " -o testsundials "))
+       (cons ldflags cppflags)
+       ))
+
+(define-syntax sundials-test 
+  (syntax-rules ()
+    ((_ (flags ...))
+     (condition-case (sundials-try-compile flags ...)
+		     (t ()    #f)))))
+
+(define sundials-headers 
+#<<EOF
+#include <sundials/sundials_config.h>
+#include <ida/ida.h>
+#include <ida/ida_dense.h>
+#include <cvode/cvode.h>           
+#include <cvode/cvode_band.h>      
+#include <nvector/nvector_serial.h>
+EOF
+)
+
+(define ld+cpp-options
+  (or (sundials-test (sundials-headers "-lsundials_ida -lsundials_cvode -lsundials_nvecserial -lblas -llapack " 
+				  ""))
+      (sundials-test (sundials-headers "-lsundials_ida -lsundials_cvode -lsundials_nvecserial -lblas -llapack" 
+				  "-I/usr/include/ida -I/usr/include/cvode"))
+      (sundials-test (sundials-headers "-lsundials_ida -lsundials_cvode -lsundials_nvecserial -lblas -llapack" 
+				  "-I/usr/include/sundials"))
+      (sundials-test (sundials-headers "-lsundials_ida -lsundials_cvode -lsundials_nvecserial -lblas -llapack" 
+				  "-I/opt/local/include"))
+      (error "unable to figure out location of SUNDIALS")))
+
+(define sundials-version
+  (string-split
+   (call-with-input-pipe "./testsundials" 
+     (lambda (port) (->string (read port)))) "."))
+
+
+(compile -O3 -d0 -S -s sundials.scm  -j sundials  -I. 
+	 -L "\"" ,(car ld+cpp-options) "\"" 
+	 -C "\"" ,(cdr ld+cpp-options) 
+	 -D ,(string-append "SUNDIALS_VERSION_MAJOR=" (car sundials-version))
+	 -D ,(string-append "SUNDIALS_VERSION_MINOR=" (cadr sundials-version))
+	 "\"")
+(compile -O3 -d0 -s sundials.import.scm)
+
+
+(install-extension
+
+  ; Name of your extension:
+  'sundials
+
+  ; Files to install for your extension:
+  `(,(dynld-name "sundials") ,(dynld-name "sundials.import") )
+
+  ; Assoc list with properties for your extension:
+  `((version 2.11)
+    ))
+

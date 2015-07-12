@@ -1,0 +1,26 @@
+;; -*- Hen -*-
+
+((egg "sundials.egg") ; This should never change
+
+ ; List here all the files that should be bundled as part of your egg.  
+
+ (files "sundials.setup" "sundials.meta" "sundials.scm" "tests")
+
+ ; Your egg's license:
+
+ (license "BSD")
+
+ ; Pick one from the list of categories (see below) for your egg and
+ ; enter it here.
+
+ (category math)
+
+ ; A list of eggs sundials depends on.
+
+ (needs dyn-vector) 
+
+ (test-depends mathh)
+
+ (author "Ivan Raikov")
+
+ (synopsis "An interface to SUNDIALS (SUite of Nonlinear and DIfferential/ALgebraic equation Solvers)."))
