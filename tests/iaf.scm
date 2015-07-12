@@ -12,7 +12,7 @@
 
 
 (define  t0 0.0)
-(define  tf 1000.0)
+(define  tf 100.0)
 
 
 

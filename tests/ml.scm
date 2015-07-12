@@ -5,7 +5,7 @@
 (use mathh sundials srfi-4)
 
 
-(define TEND  1000.0)
+(define TEND  100.0)
 
   	                   
 ;; Model parameters
@@ -81,7 +81,7 @@
 	 ;; Integration limits 
 	 (t0  0.0)
 	 (tf  TEND)
-	 (dt  1e-2))
+	 (dt  1e-1))
     
 
     ;; IDA initialization 

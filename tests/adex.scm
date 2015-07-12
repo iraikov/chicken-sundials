@@ -11,7 +11,7 @@
 
 
 (define  t0 0.0)
-(define  tf 500.0)
+(define  tf 100.0)
 
 
 (define C       200.0 )

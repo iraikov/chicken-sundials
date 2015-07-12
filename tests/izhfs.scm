@@ -11,7 +11,7 @@
 
 
 (define  t0 0.0)
-(define  tf 800.0)
+(define  tf 100.0)
 
 (define k     1.0)
 (define Vpeak 25.0)

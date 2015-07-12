@@ -7,7 +7,7 @@
 (define neg -)
 (define pow expt)
 
-(define TEND  2500.0)
+(define TEND  250.0)
 
   	                   
 ;; Model parameters
@@ -121,7 +121,7 @@
 	;; Integration limits 
 	(t0  0.0)
 	(tf  TEND)
-	(dt  0.025))
+	(dt  1e-1))
     
     ;; CVODE initialization 
     (let ((solver (cvode-create-solver
@@ -215,7 +215,7 @@
 	 ;; Integration limits 
 	 (t0  0.0)
 	 (tf  TEND)
-	 (dt  1e-2))
+	 (dt  1e-1))
     
 
     ;; IDA initialization 
