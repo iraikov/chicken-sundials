@@ -6,7 +6,7 @@ notifications:
 env:
 before_install:
     - sudo apt-get update -qq -y
-    - sudo apt-get install  chicken-bin libsundials-serial-dev libsundials-cvode1 libsundials-ida2 libsundials-nvecserial0
+    - sudo apt-get install  chicken-bin libblas3 liblapack3 libsundials-serial-dev libsundials-cvode1 libsundials-ida2 libsundials-nvecserial0
     - git config --global user.name "Travis User"
     - git config --global user.email "travis@example.net"
     - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
