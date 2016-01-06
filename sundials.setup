@@ -57,7 +57,11 @@ EOF
           (version-str 
            (string-split version-str "."))
           (else
-           (error "unable to figure out version of SUNDIALS; please set SUNDIALS_VERSION environment variable to the correct version"))
+           (begin
+             (warning "Unable to figure out version of SUNDIALS: ")
+             (warning "Assuming version 2.5.0 or later;")
+             (warning "please set SUNDIALS_VERSION environment variable to the correct version.")
+             (string-split "2.5.0" ".")))
           ))
   )
 
