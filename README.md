@@ -9,7 +9,7 @@ Solvers) is a collection of solvers for systems of ordinary
 differential equations and differential-algebraic equations.
 
 The Chicken `sundials` library provides interfaces to the CVODE and
-IDA solvers and has been tested with SUNDIALS version 2.4.0.
+IDA solvers and has been tested with SUNDIALS versions 2.4.0 and 2.5.0.
 
 
 ## Library procedures
@@ -327,7 +327,7 @@ Returns the vector of current state values of the system.
 ## License
 
 
-  Copyright 2011-2015 Ivan Raikov.
+  Copyright 2011-2016 Ivan Raikov.
   All rights reserved.
   
   Redistribution and use in source and binary forms, with or without
