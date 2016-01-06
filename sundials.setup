@@ -11,7 +11,7 @@
 		       header "\n" 
 		       "int main(int argc, char **argv) { void *x; x = NULL; CVodeFree(&x); IDAFree(&x); printf (\"%s\\n\",SUNDIALS_PACKAGE_VERSION); return 0; }\n")
 	ldflags: ldflags
-	cflags: (string-append cppflags " -o testsundials "))
+	cflags: (string-append cppflags " -o ./testsundials "))
        (cons ldflags cppflags)
        ))
 
@@ -43,11 +43,25 @@ EOF
 				  "-I/opt/local/include"))
       (error "unable to figure out location of SUNDIALS")))
 
-(define sundials-version
-  (string-split
-   (call-with-input-pipe "./testsundials" 
-     (lambda (port) (->string (read port)))) "."))
 
+(define sundials-version
+  (let (
+        (version-env (get-environment-variable "SUNDIALS_VERSION"))
+        (version-str (condition-case 
+                      (call-with-input-pipe "./testsundials" 
+                        (lambda (port) (->string (read port))))
+                      [var () #f]))
+        )
+    (cond (version-env 
+           (string-split version-env "."))
+          (version-str 
+           (string-split version-str "."))
+          (else
+           (error "unable to figure out version of SUNDIALS; please set SUNDIALS_VERSION environment variable to the correct version"))
+          ))
+  )
+
+(print "SUNDIALS version is " sundials-version)
 
 (compile -O3 -d0 -S -s sundials.scm  -j sundials  -I. 
 	 -L "\"" ,(car ld+cpp-options) "\"" 
@@ -67,6 +81,6 @@ EOF
   `(,(dynld-name "sundials") ,(dynld-name "sundials.import") )
 
   ; Assoc list with properties for your extension:
-  `((version 2.13)
+  `((version 2.14)
     ))
 

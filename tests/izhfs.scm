@@ -11,7 +11,7 @@
 
 
 (define  t0 0.0)
-(define  tf 100.0)
+(define  tf 150.0)
 
 (define k     1.0)
 (define Vpeak 25.0)
@@ -31,7 +31,7 @@
 (define  FS_c -45.0)
 (define  FS_U (* FS_b V))
 
-(define Iext 100.)
+(define Iext 400.)
 
 (define (UU v)  (if (< v Vb) 0. (* FS_b (- v Vb) (- v Vb) (- v Vb))))
 

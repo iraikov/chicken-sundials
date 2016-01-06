@@ -111,6 +111,13 @@
                                      events: (s32vector 0)
                                      residual-event: residual-spike-detect
                                      )))
+    (let ((solver (ida-create-solver t0 yy yp ressc  
+                                     tstop: tf
+				     abstol: 1e-6
+				     reltol: 1e-6
+                                     events: (s32vector 0)
+                                     residual-event: residual-spike-detect
+                                     )))
 
       ;; In loop, call IDASolve, print results, and test for error. 
       

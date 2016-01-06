@@ -3,7 +3,7 @@
 ;; Chicken Scheme bindings for SUNDIALS (SUite of Nonlinear and
 ;; DIfferential/ALgebraic equation Solvers).
 ;;
-;;  Copyright 2011-2015 Ivan Raikov.
+;;  Copyright 2011-2016 Ivan Raikov.
 ;;
 ;; 
 ;;  Redistribution and use in source and binary forms, with or without
