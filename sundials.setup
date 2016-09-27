@@ -9,9 +9,9 @@
 		       "#include <stdio.h>\n"
 	 	       "#include <math.h>\n"
 		       header "\n" 
-		       "int main(int argc, char **argv) { void *x; x = NULL; CVodeFree(&x); IDAFree(&x); printf (\"%s\\n\",SUNDIALS_PACKAGE_VERSION); return 0; }\n")
+		       "int main(int argc, char **argv) { void *x; x = NULL; CVodeFree(&x); IDAFree(&x); return 0; }\n")
 	ldflags: ldflags
-	cflags: (string-append cppflags " -o ./testsundials "))
+	cflags: cppflags)
        (cons ldflags cppflags)
        ))
 
@@ -32,6 +32,7 @@
 EOF
 )
 
+
 (define ld+cpp-options
   (or (sundials-test (sundials-headers "-lsundials_ida -lsundials_cvode -lsundials_nvecserial -lblas -llapack " 
 				  ""))
@@ -44,26 +45,31 @@ EOF
       (error "unable to figure out location of SUNDIALS")))
 
 
-(define sundials-version
-  (let (
-        (version-env (get-environment-variable "SUNDIALS_VERSION"))
-        (version-str (condition-case 
-                      (call-with-input-pipe "./testsundials" 
-                        (lambda (port) (->string (read port))))
-                      [var () #f]))
-        )
+
+(define (detect-sundials-version ldflags)
+  (let ((version-env (get-environment-variable "SUNDIALS_VERSION")))
     (cond (version-env 
            (string-split version-env "."))
-          (version-str 
-           (string-split version-str "."))
           (else
-           (begin
-             (warning "Unable to figure out version of SUNDIALS: ")
-             (warning "Assuming version 2.5.0 or later;")
-             (warning "please set SUNDIALS_VERSION environment variable to the correct version.")
-             (string-split "2.5.0" ".")))
+           (if (feature? 'cross-chicken)
+               (begin
+                 (warning "Unable to figure out version of SUNDIALS: ")
+                 (warning "Assuming version 2.5.0 or later;")
+                 (warning "please set SUNDIALS_VERSION environment variable to the correct version.")
+                 (string-split "2.5.0" "."))
+               (begin
+                 (compile -L ,ldflags detect-sundials-version.scm)
+                 (let ((version-str (condition-case 
+                                     (call-with-input-pipe "./detect-sundials-version" 
+                                       (lambda (port) (->string (read port))))
+                                     [var () #f])))
+                   (string-split version-str ".")))
+               
+               ))
           ))
   )
+
+(define sundials-version (detect-sundials-version (car ld+cpp-options)))
 
 (print "SUNDIALS version is " sundials-version)
 
