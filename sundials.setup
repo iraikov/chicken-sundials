@@ -91,6 +91,6 @@ EOF
   `(,(dynld-name "sundials") ,(dynld-name "sundials.import") )
 
   ; Assoc list with properties for your extension:
-  `((version 2.14)
+  `((version 2.15)
     ))
 
