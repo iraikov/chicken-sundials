@@ -4,6 +4,7 @@
 (uri targz "https://github.com/iraikov/chicken-sundials/tarball/{egg-release}")
 (uri files-list "http://code.call-cc.org/files-list?egg={egg-name};egg-release={egg-release};chicken-release={chicken-release}" old-uri)
 
+(release "2.15" )
 (release "2.14" )
 (release "2.13" )
 (release "2.12" )
