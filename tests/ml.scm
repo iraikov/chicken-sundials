@@ -5,7 +5,7 @@
 (use mathh sundials srfi-4)
 
 
-(define TEND  100.0)
+(define TEND  150.0)
 
   	                   
 ;; Model parameters
@@ -87,8 +87,8 @@
     ;; IDA initialization 
     (let ((solver (ida-create-solver t0 yy yp ressc  
                                      tstop: tf
-				     abstol: 1e-14
-				     reltol: 1e-14)))
+				     abstol: 1e-10
+				     reltol: 1e-10)))
 
       ;; In loop, call IDASolve, print results, and test for error. 
       
@@ -208,5 +208,5 @@
 	    )))
       
 (cvode-main)
-(cvode-main/unsafe)
-(ida-main)      
+;(cvode-main/unsafe)
+;(ida-main)      
