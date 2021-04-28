@@ -4,7 +4,9 @@
 ;; discontinuities.
 ;;
 
-(use sundials srfi-4)
+
+(import mathh sundials srfi-4 (chicken format))
+
 
 
 (define  t0 0.0)

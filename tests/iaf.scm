@@ -4,7 +4,7 @@
 ;; discontinuities.
 ;;
 
-(use sundials srfi-4)
+(import sundials srfi-4)
 
 
 (define  reltol 1.0e-3)

@@ -3,7 +3,9 @@
 ;;
 
 
-(use sundials srfi-4)
+
+(import mathh sundials srfi-4 (chicken format))
+
 
 
 (define  reltol 1.0e-6)

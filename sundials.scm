@@ -3,7 +3,7 @@
 ;; Chicken Scheme bindings for SUNDIALS (SUite of Nonlinear and
 ;; DIfferential/ALgebraic equation Solvers).
 ;;
-;;  Copyright 2011-2016 Ivan Raikov.
+;;  Copyright 2011-2021 Ivan Raikov.
 ;;
 ;; 
 ;;  Redistribution and use in source and binary forms, with or without
@@ -53,14 +53,11 @@
 	 cvode-reinit-solver cvode-destroy-solver cvode-solve cvode-yy cvode-t
 	 cvode-get-last-order cvode-get-num-steps cvode-get-last-step
 
-	 pointer-f64-ref pointer-f64-set! pointer+-f64
 	 )
 
-	(import scheme chicken foreign)
-	(require-extension srfi-4 dyn-vector)
-	(require-library lolevel srfi-1 data-structures)
-	(import (only lolevel move-memory! object-evict object-release pointer+ pointer-f64-ref pointer-f64-set!)
-		(only srfi-1 fold))
+	(import scheme (chicken base) (chicken foreign) (chicken fixnum) srfi-4 srfi-69
+                (only (chicken memory) move-memory! 
+                      pointer+ pointer-f64-ref pointer-f64-set!))
 
 
 
@@ -71,9 +68,11 @@
 #include <assert.h>
 
 #include <ida/ida.h>
-#include <ida/ida_dense.h>
+#include <ida/ida_direct.h>
+#include <sunmatrix/sunmatrix_dense.h>
+#include <sunlinsol/sunlinsol_dense.h>
 #include <cvode/cvode.h>           
-#include <cvode/cvode_band.h>      
+#include <cvode/cvode_diag.h>      
 #include <nvector/nvector_serial.h>
 
 
@@ -89,14 +88,14 @@ static void chicken_panic (C_char *msg)
 static void chicken_throw_exception(C_word value) C_noret;
 static void chicken_throw_exception(C_word value)
 {
-  char *aborthook = C_text("\003sysabort");
+  char *aborthook = C_text("\003syserror-hook");
 
   C_word *a = C_alloc(C_SIZEOF_STRING(strlen(aborthook)));
   C_word abort = C_intern2(&a, aborthook);
 
   abort = C_block_item(abort, 0);
   if (C_immediatep(abort))
-    chicken_panic(C_text("`##sys#abort' is not defined"));
+    chicken_panic(C_text("`##sys#error-hook' is not defined"));
 
 #if defined(C_BINARY_VERSION) && (C_BINARY_VERSION >= 8)
   C_word rval[3] = { abort, C_SCHEME_UNDEFINED, value };
@@ -136,6 +135,8 @@ typedef struct IDA_Solver_Handle_struct
     int* events;
     double abstol;
     double reltol;
+    SUNMatrix A;
+    SUNLinearSolver LS;
 
 } IDA_Solver_Handle;
 
@@ -166,17 +167,17 @@ typedef struct CVODE_Solver_Handle_struct
 (define cvode-iter/functional (foreign-value "CV_FUNCTIONAL" int))
 (define cvode-iter/newton (foreign-value "CV_NEWTON" int))
 
-(define ida-residual-init-global  (make-parameter (make-dynvector 0 (lambda _ (begin 0)))))
-(define ida-residual-main-global  (make-parameter (make-dynvector 0 (lambda _ (begin 0)))))
-(define ida-residual-event-global (make-parameter (make-dynvector 0 (lambda _ (begin 0)))))
+(define ida-residual-init-global  (make-hash-table))
+(define ida-residual-main-global  (make-hash-table))
+(define ida-residual-event-global (make-hash-table))
 
-(define ida-data-global (make-parameter (make-dynvector 0 #f)))
+(define ida-data-global (make-hash-table))
 
-(define cvode-rhs-global    (make-parameter (make-dynvector 0 (lambda _ (begin 0)))))
-(define cvode-event-global  (make-parameter (make-dynvector 0 (lambda _ (begin 0)))))
-(define cvode-ewt-global    (make-parameter (make-dynvector 0 (lambda _ (begin 0)))))
+(define cvode-rhs-global    (make-hash-table))
+(define cvode-event-global  (make-hash-table))
+(define cvode-ewt-global    (make-hash-table))
 
-(define cvode-data-global (make-parameter (make-dynvector 0 #f)))
+(define cvode-data-global (make-hash-table))
 
 
 
@@ -193,11 +194,13 @@ EOF
 				   (c-pointer yy) 
 				   (c-pointer yp) 
 				   (c-pointer rr)
-				   (unsigned-int data-index)) int 
-   (let ((v (and ((dynvector-ref (ida-residual-main-global) data-index)
+				   (unsigned-int data-index)) int
+   (print "ida_residual_main_cb: " ida-residual-main-global)
+   (print "ida_residual_main_cb: " (hash-table-keys ida-residual-main-global))
+   (let ((v (and ((hash-table-ref ida-residual-main-global data-index)
 		  t (c_nvector_data_pointer yy) 
 		  (c_nvector_data_pointer yp) (c_nvector_data_pointer rr )
-		  (dynvector-ref (ida-data-global) data-index)) 0)))
+		  (hash-table-ref/default ida-data-global data-index #f)) 0)))
      v))
 
 
@@ -206,10 +209,10 @@ EOF
 				   (c-pointer yp) 
 				   (c-pointer rr)
 				   (unsigned-int data-index)) int 
-   (let ((v ((dynvector-ref (ida-residual-init-global) data-index)
+   (let ((v ((hash-table-ref ida-residual-init-global data-index)
 	     t (c_nvector_data_pointer yy) 
 	     (c_nvector_data_pointer yp) (c_nvector_data_pointer rr )
-	     (dynvector-ref (ida-data-global) data-index))))
+	     (hash-table-ref ida-data-global data-index))))
      v))
 
 
@@ -218,11 +221,11 @@ EOF
                                         (c-pointer yy) 
                                         (c-pointer yp) 
                                         (c-pointer rr)
-                                        (unsigned-int data-index)) int 
-   (let ((v (and ((dynvector-ref (ida-residual-event-global) data-index)
+                                        (unsigned-int data-index)) int
+   (let ((v (and ((hash-table-ref ida-residual-event-global data-index)
 		  t (c_nvector_data_pointer yy) 
 		  (c_nvector_data_pointer yp) rr
-		  (dynvector-ref (ida-data-global) data-index)) 0)))
+		  (hash-table-ref ida-data-global data-index)) 0)))
      v))
 
 
@@ -230,9 +233,9 @@ EOF
 			       (c-pointer yy) 
 			       (c-pointer yp) 
 			       (unsigned-int data-index)) int 
-   (let ((v (and ((dynvector-ref (cvode-rhs-global) data-index)
+   (let ((v (and ((hash-table-ref cvode-rhs-global data-index)
 		  t (c_nvector_data_pointer yy) (c_nvector_data_pointer yp) 
-		  (dynvector-ref (cvode-data-global) data-index)) 0)))
+		  (hash-table-ref cvode-data-global data-index)) 0)))
      v))
 
 
@@ -240,18 +243,18 @@ EOF
 				 (c-pointer yy) 
 				 (c-pointer gout) 
 				 (unsigned-int data-index)) int 
-   (let ((v (and ((dynvector-ref (cvode-event-global) data-index)
+   (let ((v (and ((hash-table-ref cvode-event-global data-index)
 		  t (c_nvector_data_pointer yy) gout
-		  (dynvector-ref (cvode-data-global) data-index)) 0)))
+		  (hash-table-ref cvode-data-global data-index)) 0)))
      v))
 
 
 (define-external (cvode_ewt_cb (c-pointer yy) 
 			       (c-pointer ewt) 
 			       (unsigned-int data-index)) int 
-   (let ((v (and ((dynvector-ref (cvode-ewt-global) data-index)
+   (let ((v (and ((hash-table-ref cvode-ewt-global data-index)
 		  (c_nvector_data_pointer yy) (c_nvector_data_pointer ewt) 
-		  (dynvector-ref (cvode-data-global) data-index)) 0)))
+		  (hash-table-ref cvode-data-global data-index)) 0)))
      v))
 
 
@@ -329,21 +332,12 @@ IDA_Solver_Handle* ida_create_solver
        chicken_error("could not allocate memory with IDACreate", C_SCHEME_UNDEFINED);
     }
 
-#if SUNDIALS_VERSION_MAJOR==2 && SUNDIALS_VERSION_MINOR>=4
     flag = IDASetUserData(solver_handle->ida_mem, (void *)data_index);
     if (flag != IDA_SUCCESS) 
     {
        chicken_error("could not set user data with IDASetUserData", C_fix(flag));
     }
-#else
-    flag = IDASetRdata(solver_handle->ida_mem, (void *)data_index);
-    if (flag != IDA_SUCCESS) 
-    {
-       chicken_error("could not set user data with IDASetRdata", C_fix(flag));
-    }
-#endif
 
-#if SUNDIALS_VERSION_MAJOR==2 && SUNDIALS_VERSION_MINOR>=4
     flag = IDAInit (solver_handle->ida_mem, 
 		    (IDAResFn)ida_residual_main_cb, 
 		    time_start, 
@@ -355,29 +349,8 @@ IDA_Solver_Handle* ida_create_solver
     flag = IDASStolerances(solver_handle->ida_mem, solver_handle->reltol, solver_handle->abstol);
     if (flag != IDA_SUCCESS) 
         chicken_error("could not set tolerances with IDASStolerances", C_fix(flag)) ;	
-#else
-#if SUNDIALS_VERSION_MAJOR==2 && SUNDIALS_VERSION_MINOR>=3
-    flag = IDAMalloc (solver_handle->ida_mem, 
-		      (IDAResFn)ida_residual_main_cb, 
-		      time_start, 
-		      solver_handle->yy, 
-		      solver_handle->yp,
-		      IDA_SS,
-		      solver_handle->reltol, 
-		      (void *)&solver_handle->abstol);
-#else
-    flag = IDAMalloc (solver_handle->ida_mem, 
-		      (IDAResFn)ida_residual_main_cb, 
-		      time_start, 
-		      solver_handle->yy, 
-		      solver_handle->yp,
-		      IDA_SS,
-		      &(solver_handle->reltol), 
-		      (void *)&solver_handle->abstol);
-#endif
     if (flag != IDA_SUCCESS) 
         chicken_error("could not initialize solver with IDAMalloc", C_fix(flag)) ;	
-#endif
 
     flag = IDASetId(solver_handle->ida_mem, solver_handle->id);
     if (flag != IDA_SUCCESS) 
@@ -387,13 +360,21 @@ IDA_Solver_Handle* ida_create_solver
     if (flag != IDA_SUCCESS) 
         chicken_error("could not set error suppression flag with IDASetSuppressAlg", C_fix(flag)) ;	
 
-    flag = IDADense(solver_handle->ida_mem, variable_number);
-#if SUNDIALS_VERSION_MAJOR==2 && SUNDIALS_VERSION_MINOR>=4
-    if (flag != IDADLS_SUCCESS) 
-#else
-    if (flag != IDADENSE_SUCCESS) 
-#endif
-       chicken_error("could not initialize linear solver with IDADense", C_fix(flag)) ;	
+    /* Create dense SUNMatrix for use in linear solves */
+    solver_handle->A = SUNDenseMatrix(variable_number, variable_number);
+    if ((void *)solver_handle->A == NULL)
+        chicken_error("could not initialize SUNDenseMatrix object", C_fix(1));
+
+
+    /* Create dense SUNLinearSolver object */
+    solver_handle->LS = SUNDenseLinearSolver(solver_handle->yy, solver_handle->A);
+    if ((void *)solver_handle->LS == NULL)
+        chicken_error("could not initialize SUNDenseLinearSolver object", C_fix(1));
+    
+    /* Attach the matrix and linear solver */
+    flag = IDADlsSetLinearSolver(solver_handle->ida_mem, solver_handle->LS, solver_handle->A);
+    if (flag != IDA_SUCCESS) 
+        chicken_error("could not attach matrix and linear solver with IDADlsSetLinearSolver", C_fix(flag));	
   
     if (ic)
     {
@@ -404,11 +385,7 @@ IDA_Solver_Handle* ida_create_solver
 
     if (events > 0)
     { 
-#if SUNDIALS_VERSION_MAJOR==2 && SUNDIALS_VERSION_MINOR>=4
        flag = IDARootInit(solver_handle->ida_mem, event_number, (IDARootFn)ida_residual_event_cb);
-#else
-       flag = IDARootInit(solver_handle->ida_mem, event_number, (IDARootFn)ida_residual_event_cb, (void *)data_index);
-#endif
        if (flag != IDA_SUCCESS) 
           chicken_error("could not initialize event variables with IDARootInit", C_fix(flag)) ;	
 
@@ -435,19 +412,8 @@ void ida_reinit_solver (IDA_Solver_Handle* solver_handle, double t0, C_word y0, 
     N_VScale(1.0, ytmp, solver_handle->yy);
     N_VScale(1.0, yptmp, solver_handle->yp);
 
-#if SUNDIALS_VERSION_MAJOR==2 && SUNDIALS_VERSION_MINOR>=4
     flag = IDAReInit(solver_handle->ida_mem, t0, solver_handle->yy, solver_handle->yp);
-#else
-#if SUNDIALS_VERSION_MAJOR==2 && SUNDIALS_VERSION_MINOR>=3
-    flag = IDAReInit(solver_handle->ida_mem, (IDAResFn)ida_residual_main_cb, 
-		     t0, solver_handle->yy, solver_handle->yp,
-		     IDA_SS, solver_handle->reltol, (void *)&(solver_handle->abstol));
-#else
-    flag = IDAReInit(solver_handle->ida_mem, (IDAResFn)ida_residual_main_cb, 
-		     t0, solver_handle->yy, solver_handle->yp,
-		     IDA_SS, &(solver_handle->reltol), (void *)&(solver_handle->abstol));
-#endif
-#endif
+
     if (flag != CV_SUCCESS) 
          chicken_error("could not set reinitialize solver time with IDAReInit", C_fix(flag)) ;	
 
@@ -464,6 +430,8 @@ void ida_destroy_solver (IDA_Solver_Handle* solver_handle)
     N_VDestroy_Serial(solver_handle->yy);
     N_VDestroy_Serial(solver_handle->yp);
     N_VDestroy_Serial(solver_handle->id);
+    SUNLinSolFree(solver_handle->LS);
+    SUNMatDestroy(solver_handle->A);
     free(solver_handle);
     return;
 }
@@ -593,21 +561,12 @@ CVODE_Solver_Handle *cvode_create_solver
     }
 
 
-#if SUNDIALS_VERSION_MAJOR==2 && SUNDIALS_VERSION_MINOR>=4
     flag = CVodeSetUserData(solver_handle->cvode_mem, (void *)data_index);
     if (flag != CV_SUCCESS) 
     {
        chicken_error("could not set user data with CVodeSetUserData", C_SCHEME_UNDEFINED);
     }
-#else
-    flag = CVodeSetFdata(solver_handle->cvode_mem, (void *)data_index);
-    if (flag != CV_SUCCESS) 
-    {
-       chicken_error("could not set user data with CVodeSetFdata", C_fix(flag));
-    }
-#endif
 
-#if SUNDIALS_VERSION_MAJOR==2 && SUNDIALS_VERSION_MINOR>=4
     flag = CVodeInit (solver_handle->cvode_mem, 
 		    (CVRhsFn)cvode_rhs_cb, 
 		    time_start, 
@@ -626,27 +585,6 @@ CVODE_Solver_Handle *cvode_create_solver
        if (flag != CV_SUCCESS) 
           chicken_error("could not set tolerances with CVodeSStolerances", C_fix(flag)) ;	
     }
-#else
-#if SUNDIALS_VERSION_MAJOR==2 && SUNDIALS_VERSION_MINOR>=3
-    flag = CVodeMalloc (solver_handle->cvode_mem, 
-			(CVRhsFn)cvode_rhs_cb, 
-			time_start, 
-			solver_handle->yy,
-			CV_SS,
-			solver_handle->reltol, 
-			(void *)&(solver_handle->abstol));
-#else
-    flag = CVodeMalloc (solver_handle->cvode_mem, 
-			(CVRhsFn)cvode_rhs_cb, 
-			time_start, 
-			solver_handle->yy,
-			CV_SS,
-			&(solver_handle->reltol), 
-			(void *)&(solver_handle->abstol));
-#endif
-    if (flag != CV_SUCCESS) 
-        chicken_error("could not initialize solver with CVodeMalloc", C_fix(flag)) ;	
-#endif
 
     if (iter == CV_NEWTON)
     {
@@ -659,11 +597,7 @@ CVODE_Solver_Handle *cvode_create_solver
 
     if (event_number > 0)
     { 
-#if SUNDIALS_VERSION_MAJOR==2 && SUNDIALS_VERSION_MINOR>=4
        flag = CVodeRootInit(solver_handle->cvode_mem, event_number, (CVRootFn)cvode_event_cb);
-#else
-       flag = CVodeRootInit(solver_handle->cvode_mem, event_number, (CVRootFn)cvode_event_cb, (void *)data_index);
-#endif
        if (flag != CV_SUCCESS) 
           chicken_error("could not initialize event variables with CVodeRootInit", C_fix(flag)) ;	
 
@@ -688,19 +622,7 @@ void cvode_reinit_solver (CVODE_Solver_Handle* solver_handle, double t0, C_word 
     ytmp = N_VMake_Serial(NV_LENGTH_S(solver_handle->yy), C_c_f64vector(y0));
 
     N_VScale(1.0, ytmp, solver_handle->yy);
-#if SUNDIALS_VERSION_MAJOR==2 && SUNDIALS_VERSION_MINOR>=4
     flag = CVodeReInit(solver_handle->cvode_mem, t0, solver_handle->yy);
-#else
-#if SUNDIALS_VERSION_MAJOR==2 && SUNDIALS_VERSION_MINOR>=3
-    flag = CVodeReInit(solver_handle->cvode_mem, (CVRhsFn)cvode_rhs_cb, 
-                       t0, solver_handle->yy,
-		       CV_SS, solver_handle->reltol, (void *)&(solver_handle->abstol));
-#else
-    flag = CVodeReInit(solver_handle->cvode_mem, (CVRhsFn)cvode_rhs_cb, 
-                       t0, solver_handle->yy,
-		       CV_SS, &(solver_handle->reltol), (void *)&(solver_handle->abstol));
-#endif
-#endif
     if (flag != CV_SUCCESS) 
          chicken_error("could not set reinitialize solver time with CVodeReInit", C_fix(flag)) ;	
 
@@ -847,10 +769,10 @@ int cvode_solve (CVODE_Solver_Handle* solver_handle, double tout)
   (let (
 	(n (f64vector-length variables))
 	(nevents (s32vector-length events))
-	(data-index (dynvector-length (ida-data-global)))
+	(data-index (hash-table-size ida-data-global))
 	)
 
-    (if user-data (dynvector-set! (ida-data-global) data-index user-data))
+    (if user-data (hash-table-set! ida-data-global data-index user-data))
 
     (let ((residual-main1
 	   (if user-data
@@ -916,13 +838,13 @@ int cvode_solve (CVODE_Solver_Handle* solver_handle, double tout)
 
 	  )
 
-      (dynvector-set! (ida-residual-main-global) data-index residual-main1)
-      (if residual-init (dynvector-set! (ida-residual-init-global) data-index residual-init1))
-      (if residual-event (dynvector-set! (ida-residual-event-global) data-index residual-event1))
+      (hash-table-set! ida-residual-main-global data-index residual-main1)
+      (if residual-init (hash-table-set! ida-residual-init-global data-index residual-init1))
+      (if residual-event (hash-table-set! ida-residual-event-global data-index residual-event1))
     
       (c-ida-create-solver
        tstart tstop  
-       n (object-evict variables) (object-evict derivatives)
+       n variables derivatives
        ic alg-or-diff suppress (s32vector-length events) events
        data-index abstol reltol)
 
@@ -945,16 +867,21 @@ int cvode_solve (CVODE_Solver_Handle* solver_handle, double tout)
 	 )
 
   (assert (= (f64vector-length variables) (f64vector-length derivatives)))
+  (print "residual-main = " residual-main)
   
-  (let ((data-index (dynvector-length (ida-data-global))))
+  (let ((data-index (hash-table-size ida-data-global)))
 
-    (if user-data (dynvector-set! (ida-data-global) data-index user-data))
-    (if residual-init (dynvector-set! (ida-residual-init-global) data-index residual-init))
-    (if residual-event (dynvector-set! (ida-residual-event-global) data-index residual-event))
+    (print "data-index = " data-index)
+    (hash-table-set! ida-residual-main-global data-index residual-main)
+    (print "ida-residual-main-global = " ida-residual-main-global)
+
+    (if user-data (hash-table-set! ida-data-global data-index user-data))
+    (if residual-init (hash-table-set! ida-residual-init-global data-index residual-init))
+    (if residual-event (hash-table-set! ida-residual-event-global data-index residual-event))
     
     (c-ida-create-solver 
      tstart tstop  
-     (f64vector-length variables) (object-evict variables) (object-evict derivatives)
+     (f64vector-length variables) variables derivatives
      ic alg-or-diff suppress (s32vector-length events) events
      data-index abstol reltol)
 
@@ -973,8 +900,6 @@ int cvode_solve (CVODE_Solver_Handle* solver_handle, double tout)
   (foreign-safe-lambda void "ida_destroy_solver" (nonnull-c-pointer IDASolverHandle) ))
 
 (define (ida-destroy-solver solver)
-  (object-release (ida-syy solver))
-  (object-release (ida-syp solver))
   (c-ida-destroy-solver solver))
 
 (define ida-solve
@@ -1095,10 +1020,10 @@ EOF
   (let (
 	(n (f64vector-length variables))
 	(nevents (s32vector-length events))
-	(data-index (dynvector-length (cvode-data-global)))
+	(data-index (hash-table-size cvode-data-global))
 	)
 
-    (if user-data (dynvector-set! (cvode-data-global) data-index user-data))
+    (if user-data (hash-table-set! cvode-data-global data-index user-data))
 
     (let ((rhs-fn1
 	   (if user-data
@@ -1148,13 +1073,13 @@ EOF
 	       )))
 	  )
     
-      (dynvector-set! (cvode-rhs-global) data-index rhs-fn1)
-      (if ewt-fn (dynvector-set! (cvode-ewt-global) data-index ewt-fn1))
-      (if event-fn (dynvector-set! (cvode-event-global) data-index event-fn1))
+      (hash-table-set! cvode-rhs-global data-index rhs-fn1)
+      (if ewt-fn (hash-table-set! cvode-ewt-global data-index ewt-fn1))
+      (if event-fn (hash-table-set! cvode-event-global data-index event-fn1))
     
     (c-cvode-create-solver
      lmm iter max-order tstart tstop  
-     n (object-evict variables )
+     n variables
      (if ewt-fn 1 0) (s32vector-length events) events
      data-index abstol reltol)
 
@@ -1174,17 +1099,17 @@ EOF
 	 (reltol  1.0e-6)
 	 (abstol  1.0e-6)
 	 )
-  (let ((data-index (dynvector-length (cvode-data-global))))
+  (let ((data-index (hash-table-size cvode-data-global)))
 
-    (if user-data (dynvector-set! (cvode-data-global) data-index user-data))
+    (if user-data (hash-table-set! cvode-data-global data-index user-data))
 
-    (dynvector-set! (cvode-rhs-global) data-index rhs-fn)
-    (if ewt-fn (dynvector-set! (cvode-ewt-global) data-index ewt-fn))
-    (if event-fn (dynvector-set! (cvode-event-global) data-index event-fn))
+    (hash-table-set! cvode-rhs-global data-index rhs-fn)
+    (if ewt-fn (hash-table-set! cvode-ewt-global data-index ewt-fn))
+    (if event-fn (hash-table-set! cvode-event-global data-index event-fn))
     
     (c-cvode-create-solver
      lmm iter max-order tstart tstop  
-     (f64vector-length variables) (object-evict variables )
+     (f64vector-length variables)  variables
      (if ewt-fn 1 0) (s32vector-length events) events
      data-index abstol reltol)
     ))
@@ -1202,7 +1127,6 @@ EOF
   (foreign-safe-lambda void "cvode_destroy_solver" (nonnull-c-pointer CVODESolverHandle) ))
 
 (define (cvode-destroy-solver solver)
-  (object-release (cvode-syy solver))
   (c-cvode-destroy-solver solver))
 
 

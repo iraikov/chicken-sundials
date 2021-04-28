@@ -3,7 +3,9 @@
 ;; Adaptive Exponential Integrate-and-Fire model.
 ;;
 
-(use sundials srfi-4)
+
+(import mathh sundials srfi-4 (chicken format))
+
 
 
 (define  reltol 1.0e-4)
@@ -144,7 +146,7 @@
       (ida-destroy-solver solver)
       
       ))
-  )
+  ))
 
 
 (define (print-results solver)

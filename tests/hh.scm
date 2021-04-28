@@ -2,7 +2,7 @@
 ;; Hodgkin-Huxley pulse propagation model
 ;;
 
-(use mathh sundials srfi-4)
+(import mathh sundials srfi-4 (chicken format))
 
 (define neg -)
 (define pow expt)
@@ -267,6 +267,6 @@
 	    )))
       
       
-(main)
-(main/unsafe)
 (ida-main)
+;(main)
+;(main/unsafe)

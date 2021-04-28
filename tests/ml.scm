@@ -2,7 +2,8 @@
 ;; Morris-Lecar model
 ;;
 
-(use mathh sundials srfi-4)
+
+(import mathh sundials srfi-4 (chicken format) (chicken memory))
 
 
 (define TEND  100.0)
@@ -50,7 +51,7 @@
 
 (define (rhs/unsafe t yy yp _)
   (let ((v (pointer-f64-ref yy))
-	(w (pointer-f64-ref (pointer+-f64 yy 1))))
+	(w (pointer-f64-ref (pointer+ yy 1))))
 
   (let ((ica (* gca (* (minf v)  (- vca v))))
 	(ik  (* gk  (* w (- vk v )))))
@@ -59,7 +60,7 @@
 	  (dw (* (lamw v) (- (winf v) w))))
     
       (pointer-f64-set! yp dv)
-      (pointer-f64-set! (pointer+-f64 yp 1) dw)
+      (pointer-f64-set! (pointer+ yp 1) dw)
 
       ))
   ))

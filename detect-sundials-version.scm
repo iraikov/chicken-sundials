@@ -3,7 +3,7 @@
 ;; Chicken Scheme bindings for SUNDIALS (SUite of Nonlinear and
 ;; DIfferential/ALgebraic equation Solvers).
 ;;
-;;  Copyright 2011-2016 Ivan Raikov.
+;;  Copyright 2011-2019 Ivan Raikov.
 ;;
 ;; 
 ;;  Redistribution and use in source and binary forms, with or without
@@ -39,7 +39,7 @@
 ;;  
 ;;
 
-(import scheme chicken foreign)
+(import scheme (chicken base) (chicken foreign))
 
 
 #>
@@ -49,12 +49,13 @@
 #include <assert.h>
 
 #include <ida/ida.h>
-#include <ida/ida_dense.h>
 #include <cvode/cvode.h>           
-#include <cvode/cvode_band.h>      
+#include <cvode/cvode_diag.h>      
 #include <nvector/nvector_serial.h>
+#include <sunmatrix/sunmatrix_dense.h>
+#include <sunlinsol/sunlinsol_dense.h>
 
 <#
 
 
-(print (foreign-value "SUNDIALS_PACKAGE_VERSION" c-string))
+(print (foreign-value "SUNDIALS_VERSION" c-string))

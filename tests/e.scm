@@ -2,7 +2,9 @@
 ;; Compute Euler's number
 ;;
 
-(use sundials srfi-4)
+
+(import mathh sundials srfi-4 (chicken format) (chicken memory))
+
 
 ;; Problem Constants 
 
@@ -11,14 +13,16 @@
 (define TEND  1.0)
 
 
-(define (ressc t yy yp)
+(define (ressc t yy yp rr data)
   (let ((v (- (f64vector-ref yp 0) (f64vector-ref yy 0))))
+    ;(print "yy = " yy " yp = " yp " v = " v)
     (f64vector v)))
 
 
 (define (ressc/unsafe t yy yp rr data)
   (let ((v (- (pointer-f64-ref yp) (pointer-f64-ref yy))))
-    (pointer-f64-set! rr v)))
+    (pointer-f64-set! rr v)
+    ))
 
 
 (define (main)
@@ -51,6 +55,7 @@
 	  ))
 
       (let ((yy (ida-yy solver)))
+        (print yy)
 	(assert (< (abs (- 2.71828182846 (f64vector-ref yy 0) )) 1e-12)) )
       
       (ida-destroy-solver solver)
@@ -107,5 +112,5 @@
 	    )))
       
       
-(main)
+;(main)
 (main/unsafe)

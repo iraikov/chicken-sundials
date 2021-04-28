@@ -1,0 +1,10 @@
+;; -*- Hen -*-
+
+((synopsis "An interface to SUNDIALS (SUite of Nonlinear and DIfferential/ALgebraic equation Solvers).")
+ (license "BSD")
+ (category math)
+ (dependencies srfi-1 srfi-69) 
+ (test-dependencies test mathh)
+ (build-dependencies compile-file)
+ (author "Ivan Raikov")
+ (components (extension sundials (custom-build "build.sh"))))
