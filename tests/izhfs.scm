@@ -91,7 +91,7 @@
 	      (begin
 		;; discrete event: re-initialize solver to integrate over the discontinuity
 		(print-results solver)
-		(cvode-reinit-solver solver (+ tnext h) (vreset (cvode-t solver) h (cvode-yy solver)) )
+		(cvode-reinit-solver solver (cvode-t solver) (vreset (cvode-t solver) h (cvode-yy solver)) )
 		(recur tnext (+ iout 1)))
 
 	      (if (< (cvode-t solver) tnext) 

@@ -2,7 +2,7 @@
 ;; Hodgkin-Huxley pulse propagation model
 ;;
 
-(import mathh sundials srfi-4 (chicken format))
+(import mathh sundials srfi-4 (chicken format) (chicken memory))
 
 (define neg -)
 (define pow expt)
@@ -73,9 +73,9 @@
 
 (define (rhs/unsafe t yy yp _)
   (let ((v (pointer-f64-ref yy))
-	(m (pointer-f64-ref (pointer+-f64 yy 1)))
-	(h (pointer-f64-ref (pointer+-f64 yy 2)))
-	(n (pointer-f64-ref (pointer+-f64 yy 3))))
+	(m (pointer-f64-ref (pointer+f64 yy 1)))
+	(h (pointer-f64-ref (pointer+f64 yy 2)))
+	(n (pointer-f64-ref (pointer+f64 yy 3))))
 
 
     ;; transition rates at current step
@@ -105,9 +105,9 @@
 	      )
     
 	  (pointer-f64-set! yp dv)
-	  (pointer-f64-set! (pointer+-f64 yp 1) dm)
-	  (pointer-f64-set! (pointer+-f64 yp 2) dh)
-	  (pointer-f64-set! (pointer+-f64 yp 3) dn)
+	  (pointer-f64-set! (pointer+f64 yp 1) dm)
+	  (pointer-f64-set! (pointer+f64 yp 2) dh)
+	  (pointer-f64-set! (pointer+f64 yp 3) dn)
 	  
 	  )))
     ))
@@ -268,5 +268,5 @@
       
       
 (ida-main)
-;(main)
-;(main/unsafe)
+(main)
+(main/unsafe)

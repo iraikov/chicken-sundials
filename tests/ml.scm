@@ -49,9 +49,10 @@
       ))
   ))
 
-(define (rhs/unsafe t yy yp _)
+(define (rhs/unsafe t yy yp data)
+  
   (let ((v (pointer-f64-ref yy))
-	(w (pointer-f64-ref (pointer+ yy 1))))
+	(w (pointer-f64-ref (pointer+f64 yy 1))))
 
   (let ((ica (* gca (* (minf v)  (- vca v))))
 	(ik  (* gk  (* w (- vk v )))))
@@ -60,8 +61,9 @@
 	  (dw (* (lamw v) (- (winf v) w))))
     
       (pointer-f64-set! yp dv)
-      (pointer-f64-set! (pointer+ yp 1) dw)
+      (pointer-f64-set! (pointer+f64 yp 1) dw)
 
+      0
       ))
   ))
 
@@ -139,7 +141,7 @@
 	      (recur (+ tnext dt) (+ 1 iout)))
 	  ))
       
-#;      (let ((yy (cvode-yy solver)))
+      (let ((yy (cvode-yy solver)))
 	(let ((v (f64vector-ref yy 0))
 	      (w (f64vector-ref yy 1)))
 	  (printf "v = ~A w = ~A~%" v w)
@@ -172,7 +174,7 @@
 	(let ((flag  (cvode-solve solver tnext)))
 	  (if (negative? flag) (error 'main "CVODE solver error" flag))
 
-;	  (print-results/cvode solver tnext)
+	  (print-results/cvode solver tnext)
 
 	  (if (< tnext tf)
 	      (recur (+ tnext dt) (+ 1 iout)))
@@ -208,6 +210,6 @@
 	    (f64vector-ref yy 1)
 	    )))
       
+(cvode-main/unsafe)
 (cvode-main)
-;(cvode-main/unsafe)
-;(ida-main)      
+(ida-main)      

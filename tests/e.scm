@@ -13,15 +13,15 @@
 (define TEND  1.0)
 
 
-(define (ressc t yy yp rr data)
+(define (ressc t yy yp)
   (let ((v (- (f64vector-ref yp 0) (f64vector-ref yy 0))))
-    ;(print "yy = " yy " yp = " yp " v = " v)
     (f64vector v)))
 
 
 (define (ressc/unsafe t yy yp rr data)
   (let ((v (- (pointer-f64-ref yp) (pointer-f64-ref yy))))
     (pointer-f64-set! rr v)
+    0
     ))
 
 
@@ -93,6 +93,8 @@
 	  ))
 
       (let ((yy (ida-yy solver)))
+	(if (not (< (abs (- 2.71828182846 (f64vector-ref yy 0) )) 1e-12))
+            (print yy))
 	(assert (< (abs (- 2.71828182846 (f64vector-ref yy 0) )) 1e-12)) )
       
       (ida-destroy-solver solver)
@@ -103,7 +105,7 @@
 (define (print-results solver)
   (let ((yy (ida-yy solver))
 	(t (ida-t solver)))
-    (printf "~A ~A ~A ~A~%" 
+    (printf "~A ~A ~A ~A ~A~%"
 	    t
 	    (f64vector-ref yy 0)
 	    (ida-get-last-order solver)
@@ -112,5 +114,5 @@
 	    )))
       
       
-;(main)
+(main)
 (main/unsafe)

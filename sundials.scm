@@ -53,6 +53,7 @@
 	 cvode-reinit-solver cvode-destroy-solver cvode-solve cvode-yy cvode-t
 	 cvode-get-last-order cvode-get-num-steps cvode-get-last-step
 
+         pointer+f64
 	 )
 
 	(import scheme (chicken base) (chicken foreign) (chicken fixnum) srfi-4 srfi-69
@@ -75,6 +76,7 @@
 #include <cvode/cvode_diag.h>      
 #include <nvector/nvector_serial.h>
 
+#define C_f64vector_i_ref(b, i)      (((double *)C_data_pointer(C_block_item((b), 1)))[ i ])
 
 static void chicken_panic (C_char *) C_noret;
 static void chicken_panic (C_char *msg)
@@ -121,6 +123,10 @@ void chicken_error (char *msg, C_word obj)
   chicken_throw_exception(list);
 }
 
+typedef struct Solver_User_Data_struct
+{
+    unsigned int data_index;
+} Solver_User_Data;
 
 typedef struct IDA_Solver_Handle_struct
 {
@@ -137,7 +143,8 @@ typedef struct IDA_Solver_Handle_struct
     double reltol;
     SUNMatrix A;
     SUNLinearSolver LS;
-
+    Solver_User_Data *user_data;
+    
 } IDA_Solver_Handle;
 
 
@@ -152,11 +159,13 @@ typedef struct CVODE_Solver_Handle_struct
     int* events;
     double abstol;
     double reltol;
+    Solver_User_Data *user_data;
 
 } CVODE_Solver_Handle;
 
 <#
 
+(define (pointer+f64 x n) (pointer+ x (* 8 n)))
 (define-foreign-type IDASolverHandle "IDA_Solver_Handle")
 (define-foreign-type CVODESolverHandle "CVODE_Solver_Handle")
 
@@ -182,10 +191,17 @@ typedef struct CVODE_Solver_Handle_struct
 
 
 (define c_nvector_data_pointer 
-  (foreign-safe-lambda* nonnull-c-pointer ((nonnull-c-pointer x))
+  (foreign-safe-lambda* (nonnull-c-pointer double) ((nonnull-c-pointer x))
 #<<EOF
    N_Vector v = (N_Vector)x;
-   C_return (NV_DATA_S(v));
+   C_return (N_VGetArrayPointer(v));
+EOF
+))
+
+(define c_user_data_index 
+  (foreign-safe-lambda* unsigned-int ((nonnull-c-pointer x))
+#<<EOF
+   C_return (((Solver_User_Data *)x)->data_index);
 EOF
 ))
 
@@ -194,26 +210,28 @@ EOF
 				   (c-pointer yy) 
 				   (c-pointer yp) 
 				   (c-pointer rr)
-				   (unsigned-int data-index)) int
-   (print "ida_residual_main_cb: " ida-residual-main-global)
-   (print "ida_residual_main_cb: " (hash-table-keys ida-residual-main-global))
-   (let ((v (and ((hash-table-ref ida-residual-main-global data-index)
-		  t (c_nvector_data_pointer yy) 
-		  (c_nvector_data_pointer yp) (c_nvector_data_pointer rr )
-		  (hash-table-ref/default ida-data-global data-index #f)) 0)))
-     v))
+				   (c-pointer data)) int
+   (let ((data-index (c_user_data_index data)))
+     (let ((v (and ((hash-table-ref ida-residual-main-global data-index)
+                    t (c_nvector_data_pointer yy) 
+                    (c_nvector_data_pointer yp) (c_nvector_data_pointer rr )
+                    (hash-table-ref/default ida-data-global data-index #f)) 0)))
+       v))
+   )
 
 
 (define-external (ida_residual_init_cb (double t) 
 				   (c-pointer yy) 
 				   (c-pointer yp) 
 				   (c-pointer rr)
-				   (unsigned-int data-index)) int 
-   (let ((v ((hash-table-ref ida-residual-init-global data-index)
-	     t (c_nvector_data_pointer yy) 
-	     (c_nvector_data_pointer yp) (c_nvector_data_pointer rr )
-	     (hash-table-ref ida-data-global data-index))))
-     v))
+				   (c-pointer data)) int 
+   (let ((data-index (c_user_data_index data)))
+     (let ((v ((hash-table-ref ida-residual-init-global data-index)
+               t (c_nvector_data_pointer yy) 
+               (c_nvector_data_pointer yp) (c_nvector_data_pointer rr )
+               (hash-table-ref/default ida-data-global data-index #f))))
+       v))
+   )
 
 
 
@@ -221,52 +239,61 @@ EOF
                                         (c-pointer yy) 
                                         (c-pointer yp) 
                                         (c-pointer rr)
-                                        (unsigned-int data-index)) int
-   (let ((v (and ((hash-table-ref ida-residual-event-global data-index)
-		  t (c_nvector_data_pointer yy) 
-		  (c_nvector_data_pointer yp) rr
-		  (hash-table-ref ida-data-global data-index)) 0)))
-     v))
+                                        (c-pointer data)) int
+   (let ((data-index (c_user_data_index data)))
+     (let ((v (and ((hash-table-ref ida-residual-event-global data-index)
+                    t (c_nvector_data_pointer yy) 
+                    (c_nvector_data_pointer yp) rr
+                    (hash-table-ref/default ida-data-global data-index #f)) 0)))
+       v))
+   )
 
 
 (define-external (cvode_rhs_cb (double t) 
 			       (c-pointer yy) 
 			       (c-pointer yp) 
-			       (unsigned-int data-index)) int 
-   (let ((v (and ((hash-table-ref cvode-rhs-global data-index)
-		  t (c_nvector_data_pointer yy) (c_nvector_data_pointer yp) 
-		  (hash-table-ref cvode-data-global data-index)) 0)))
-     v))
+			       (c-pointer data)) int
+   (let ((data-index (c_user_data_index data)))
+     (let ((v (and ((hash-table-ref cvode-rhs-global data-index)
+                    t (c_nvector_data_pointer yy) (c_nvector_data_pointer yp) 
+                    (hash-table-ref/default cvode-data-global data-index #f)) 0)))
+       v))
+   )
 
 
 (define-external (cvode_event_cb (double t) 
 				 (c-pointer yy) 
 				 (c-pointer gout) 
-				 (unsigned-int data-index)) int 
-   (let ((v (and ((hash-table-ref cvode-event-global data-index)
-		  t (c_nvector_data_pointer yy) gout
-		  (hash-table-ref cvode-data-global data-index)) 0)))
-     v))
+				 (c-pointer data)) int
+   (let ((data-index (c_user_data_index data)))
+     (let ((v (and ((hash-table-ref cvode-event-global data-index)
+                    t (c_nvector_data_pointer yy) gout
+                    (hash-table-ref/default cvode-data-global data-index #f)) 0)))
+       v))
+   )
 
 
 (define-external (cvode_ewt_cb (c-pointer yy) 
 			       (c-pointer ewt) 
-			       (unsigned-int data-index)) int 
-   (let ((v (and ((hash-table-ref cvode-ewt-global data-index)
-		  (c_nvector_data_pointer yy) (c_nvector_data_pointer ewt) 
-		  (hash-table-ref cvode-data-global data-index)) 0)))
-     v))
+			       (c-pointer data)) int
+   (let ((data-index (c_user_data_index data)))
+     (let ((v (and ((hash-table-ref cvode-ewt-global data-index)
+                    (c_nvector_data_pointer yy) (c_nvector_data_pointer ewt) 
+                    (hash-table-ref/default cvode-data-global data-index #f)) 0)))
+       v))
+   )
 
 
 #>
 
-C_externexport  int  ida_residual_init_cb(double,void *,void *,void *,unsigned int);
-C_externexport  int  ida_residual_main_cb(double,void *,void *,void *,unsigned int);
-C_externexport  int  ida_residual_event_cb(double,void *,void *,void *,unsigned int);
+extern int  ida_residual_init_cb(double,void *,void *,void *,void *);
+extern int ida_residual_main_cb(double, void *, void *, void *, void *);
 
-C_externexport  int  cvode_rhs_cb(double,void *,void *,unsigned int);
-C_externexport  int  cvode_event_cb(double,void *,void *,unsigned int);
-C_externexport  int  cvode_ewt_cb(void *,void *,unsigned int);
+extern  int  ida_residual_event_cb(double,void *,void *,void *,void *);
+
+extern  int  cvode_rhs_cb(double,void *,void *,void *);
+extern  int  cvode_event_cb(double,void *,void *,void *);
+extern  int  cvode_ewt_cb(void *,void *,void *);
 
 
 void adjust_zero_crossings (N_Vector v, double abstol)
@@ -302,7 +329,9 @@ IDA_Solver_Handle* ida_create_solver
 {
     IDA_Solver_Handle* solver_handle;
     assert ((solver_handle = malloc (sizeof(struct IDA_Solver_Handle_struct))) != NULL);
+    assert((solver_handle->user_data = malloc (sizeof(struct Solver_User_Data_struct))) != NULL);
 
+    solver_handle->user_data->data_index = data_index;
     solver_handle->tret = 0.0;
     solver_handle->event_number = event_number;
     solver_handle->events = events;
@@ -313,14 +342,15 @@ IDA_Solver_Handle* ida_create_solver
     solver_handle->syy = variables;
     solver_handle->syp = derivatives;
 
-    solver_handle->yy = N_VMake_Serial(variable_number, C_c_f64vector(variables));
-    solver_handle->yp = N_VMake_Serial(variable_number, C_c_f64vector(derivatives));
-
+    solver_handle->yy = N_VNew_Serial(variable_number);
+    solver_handle->yp = N_VNew_Serial(variable_number);
     solver_handle->id = N_VNew_Serial(variable_number);
 
     for (i = 0; i < variable_number; i++)
     {
         NV_Ith_S(solver_handle->id,i) = (alg_or_diff[i] == 0) ? 0.0 : 1.0;
+        NV_Ith_S(solver_handle->yy,i) = C_f64vector_i_ref(variables, i);
+        NV_Ith_S(solver_handle->yp,i) = C_f64vector_i_ref(derivatives, i);
     }
 
     solver_handle->abstol = abstol;
@@ -332,7 +362,7 @@ IDA_Solver_Handle* ida_create_solver
        chicken_error("could not allocate memory with IDACreate", C_SCHEME_UNDEFINED);
     }
 
-    flag = IDASetUserData(solver_handle->ida_mem, (void *)data_index);
+    flag = IDASetUserData(solver_handle->ida_mem, (void *)solver_handle->user_data);
     if (flag != IDA_SUCCESS) 
     {
        chicken_error("could not set user data with IDASetUserData", C_fix(flag));
@@ -383,7 +413,7 @@ IDA_Solver_Handle* ida_create_solver
         chicken_error("could not compute initial conditions with IDACalcIC", C_fix(flag)) ;	
     }
 
-    if (events > 0)
+    if (event_number > 0)
     { 
        flag = IDARootInit(solver_handle->ida_mem, event_number, (IDARootFn)ida_residual_event_cb);
        if (flag != IDA_SUCCESS) 
@@ -405,13 +435,21 @@ IDA_Solver_Handle* ida_create_solver
 void ida_reinit_solver (IDA_Solver_Handle* solver_handle, double t0, C_word y0, C_word yp0)
 {
     int flag; N_Vector ytmp, yptmp;
+    size_t variable_number = NV_LENGTH_S(solver_handle->yy);
 
-    ytmp = N_VMake_Serial(NV_LENGTH_S(solver_handle->yy), C_c_f64vector(y0));
-    yptmp = N_VMake_Serial(NV_LENGTH_S(solver_handle->yp), C_c_f64vector(yp0));
+    ytmp = N_VNew_Serial(variable_number);
+    yptmp = N_VNew_Serial(variable_number);
+
+    for (size_t i = 0; i < variable_number; i++)
+    {
+        NV_Ith_S(ytmp,i) = C_f64vector_i_ref(y0, i);
+        NV_Ith_S(yptmp,i) = C_f64vector_i_ref(yp0, i);
+    }
 
     N_VScale(1.0, ytmp, solver_handle->yy);
     N_VScale(1.0, yptmp, solver_handle->yp);
 
+    
     flag = IDAReInit(solver_handle->ida_mem, t0, solver_handle->yy, solver_handle->yp);
 
     if (flag != CV_SUCCESS) 
@@ -432,6 +470,7 @@ void ida_destroy_solver (IDA_Solver_Handle* solver_handle)
     N_VDestroy_Serial(solver_handle->id);
     SUNLinSolFree(solver_handle->LS);
     SUNMatDestroy(solver_handle->A);
+    free(solver_handle->user_data);
     free(solver_handle);
     return;
 }
@@ -485,7 +524,7 @@ int ida_solve (IDA_Solver_Handle* solver_handle, double tout)
       case IDA_ROOT_RETURN:
       flag = IDAGetRootInfo(solver_handle->ida_mem, solver_handle->events);
       if (flag != IDA_SUCCESS) 
-         chicken_error("could not obtain even information wtih IDAGetRootInfo", C_fix(flag)) ;	
+         chicken_error("could not obtain even information with IDAGetRootInfo", C_fix(flag)) ;	
       adjust_zero_crossings(solver_handle->yy, solver_handle->abstol);
       adjust_zero_crossings(solver_handle->yp, solver_handle->abstol);
       return 1;
@@ -525,7 +564,9 @@ CVODE_Solver_Handle *cvode_create_solver
 {
     CVODE_Solver_Handle* solver_handle;
     assert ((solver_handle = malloc (sizeof(struct CVODE_Solver_Handle_struct))) != NULL);
+    assert((solver_handle->user_data = malloc (sizeof(struct Solver_User_Data_struct))) != NULL);
 
+    solver_handle->user_data->data_index = data_index;
     solver_handle->tret = 0.0;
     solver_handle->event_number = event_number;
     solver_handle->events = events;
@@ -534,7 +575,12 @@ CVODE_Solver_Handle *cvode_create_solver
     int i = 0;
 
     solver_handle->syy = variables;
-    solver_handle->yy = N_VMake_Serial(variable_number, C_c_f64vector(variables));
+    solver_handle->yy = N_VNew_Serial(variable_number);
+    for (i = 0; i < variable_number; i++)
+    {
+        NV_Ith_S(solver_handle->yy,i) = C_f64vector_i_ref(variables, i);
+    }
+
 
     solver_handle->abstol = abstol;
     solver_handle->reltol = reltol;
@@ -561,7 +607,8 @@ CVODE_Solver_Handle *cvode_create_solver
     }
 
 
-    flag = CVodeSetUserData(solver_handle->cvode_mem, (void *)data_index);
+    flag = CVodeSetUserData(solver_handle->cvode_mem, (void *)solver_handle->user_data);
+
     if (flag != CV_SUCCESS) 
     {
        chicken_error("could not set user data with CVodeSetUserData", C_SCHEME_UNDEFINED);
@@ -618,8 +665,13 @@ CVODE_Solver_Handle *cvode_create_solver
 void cvode_reinit_solver (CVODE_Solver_Handle* solver_handle, double t0, C_word y0)
 {
     int flag; N_Vector ytmp;
-
-    ytmp = N_VMake_Serial(NV_LENGTH_S(solver_handle->yy), C_c_f64vector(y0));
+    size_t variable_number = NV_LENGTH_S(solver_handle->yy);
+        
+    ytmp = N_VNew_Serial(variable_number);
+    for (size_t i = 0; i < variable_number; i++)
+    {
+        NV_Ith_S(ytmp,i) = C_f64vector_i_ref(y0, i);
+    }
 
     N_VScale(1.0, ytmp, solver_handle->yy);
     flag = CVodeReInit(solver_handle->cvode_mem, t0, solver_handle->yy);
@@ -636,6 +688,7 @@ void cvode_destroy_solver (CVODE_Solver_Handle* solver_handle)
 {
     CVodeFree(&(solver_handle->cvode_mem));
     N_VDestroy_Serial(solver_handle->yy);
+    free(solver_handle->user_data);
     free(solver_handle);
     return;
 }
@@ -867,13 +920,10 @@ int cvode_solve (CVODE_Solver_Handle* solver_handle, double tout)
 	 )
 
   (assert (= (f64vector-length variables) (f64vector-length derivatives)))
-  (print "residual-main = " residual-main)
   
   (let ((data-index (hash-table-size ida-data-global)))
 
-    (print "data-index = " data-index)
     (hash-table-set! ida-residual-main-global data-index residual-main)
-    (print "ida-residual-main-global = " ida-residual-main-global)
 
     (if user-data (hash-table-set! ida-data-global data-index user-data))
     (if residual-init (hash-table-set! ida-residual-init-global data-index residual-init))
@@ -1203,8 +1253,6 @@ EOF
 ))
 
 
-(define (pointer+-f64 p n)
-  (pointer+ p (fx* 8 n)))
 
 
 )
