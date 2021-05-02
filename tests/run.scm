@@ -1,5 +1,5 @@
 
-(import scheme (chicken base) (chicken file))
+(import scheme (chicken base) (chicken process-context) (chicken pathname))
 (define prefix (pathname-directory (program-name)))
 
 (load (make-pathname prefix "e.scm"))
