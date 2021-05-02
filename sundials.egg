@@ -5,6 +5,6 @@
  (category math)
  (dependencies srfi-1 srfi-69) 
  (test-dependencies test mathh)
- (build-dependencies compile-file)
+ (build-dependencies srfi-13 compile-file)
  (author "Ivan Raikov")
  (components (extension sundials (custom-build "build.sh"))))
